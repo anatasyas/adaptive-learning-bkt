@@ -1,324 +1,131 @@
 """
-evaluator.py — BKT+Ontologi vs Sequential Baseline
+ontology.py — Pure logic, data-agnostic.
 
-Sequential Baseline merepresentasikan pembelajaran konvensional:
-  - Urutan KC tetap (B01 → B02 → ... → A02), sama untuk semua siswa
-  - Prediksi P(benar) = rata-rata akurasi KC dari data latih (empirical mean)
-  - Tidak ada pembaruan knowledge state per siswa
-  - Tidak ada pengecekan prasyarat
-
-Metrik yang digunakan:
-  Prediksi   : AUC-ROC, RMSE, Akurasi (one-step-ahead)
-  Kurikulum  : Param Recovery RMSE P(L₀), Path Validity
+Cara pakai:
+    import os as _os
+    _base = _os.path.dirname(_os.path.abspath(__file__))
+    G = build_ontology(_os.path.join(_base, "data", "math_grade1.json"))
+    G = build_ontology("data/math_grade2.json")
 """
 
-import csv, json, math, random, os
-from collections import defaultdict
-from pathlib import Path
+import json
 import networkx as nx
-
-from ontology import (
-    build_ontology, get_available_kcs,
-    get_ontology_informed_prior, get_prerequisites,
-)
-from bkt_engine import (
-    StudentModel, KCState,
-    init_student, process_response,
-    select_next_kc, DEFAULT_BKT_PARAMS,
-)
-
-FLAT_PRIOR = 0.35
+from pathlib import Path
 
 
-# ── Sequential Baseline ───────────────────────────────────────────────────────
-def build_seq_predictor(train_csv: str) -> dict[str, float]:
-    """Hitung rata-rata akurasi per KC dari data latih sebagai predictor."""
-    acc_sum   = defaultdict(float)
-    acc_count = defaultdict(int)
-    with open(train_csv, encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            acc_sum[row["kc_id"]]   += int(row["correct"])
-            acc_count[row["kc_id"]] += 1
-    return {
-        kc: acc_sum[kc] / acc_count[kc]
-        for kc in acc_sum if acc_count[kc] > 0
-    }
+def build_ontology(data_path: str) -> nx.DiGraph:
+    path = Path(data_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Data file tidak ditemukan: {data_path}")
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    G = nx.DiGraph()
+    G.graph["metadata"] = data.get("metadata", {})
+    G.graph["topics"]   = data.get("topics", {})
+    for kc in data["knowledge_components"]:
+        G.add_node(kc["id"], **kc)
+    for prereq, kc in data["prerequisites"]:
+        G.add_edge(prereq, kc, relation="hasPrerequisite")
+    return G
 
 
-def fixed_kc_order(G: nx.DiGraph) -> list[str]:
-    """
-    Urutan KC tetap: topological sort (ikuti prasyarat),
-    merepresentasikan urutan buku/kurikulum konvensional.
-    """
-    try:
-        return list(nx.topological_sort(G))
-    except nx.NetworkXUnfeasible:
-        return list(G.nodes)
+# ─── Query Functions ──────────────────────────────────────────────────────────
+def get_prerequisites(G: nx.DiGraph, kc_id: str) -> list[str]:
+    return list(G.predecessors(kc_id))
 
+def get_all_prerequisites(G: nx.DiGraph, kc_id: str) -> list[str]:
+    return list(nx.ancestors(G, kc_id))
 
-# ── Load Dataset ──────────────────────────────────────────────────────────────
-def load_dataset(csv_path: str) -> list[dict]:
-    rows = []
-    with open(csv_path, encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            rows.append({
-                "student_id": row["student_id"],
-                "kc_id":      row["kc_id"],
-                "opportunity":int(row["opportunity"]),
-                "correct":    int(row["correct"]),
-                "true_p0":    float(row.get("true_p0", FLAT_PRIOR)),
-            })
-    return rows
+def get_all_dependents(G: nx.DiGraph, kc_id: str) -> list[str]:
+    """Semua KC yang (secara transitif) bergantung pada kc_id."""
+    return list(nx.descendants(G, kc_id))
 
+def get_dependents(G: nx.DiGraph, kc_id: str) -> list[str]:
+    return list(G.successors(kc_id))
 
-def group_by_student(rows: list[dict]) -> dict[str, list[dict]]:
-    g = defaultdict(list)
-    for r in rows:
-        g[r["student_id"]].append(r)
-    return dict(g)
+def get_kc_info(G: nx.DiGraph, kc_id: str) -> dict:
+    return G.nodes[kc_id]
 
+def get_kcs_by_topic(G: nx.DiGraph, topic: str) -> list[str]:
+    return [n for n, d in G.nodes(data=True) if d.get("topic") == topic]
 
-def load_estimated_params(path: str = "data/estimated_params.json") -> dict:
-    p = Path(path)
-    if not p.exists():
-        return {"ontologi": {}}
-    with open(p, encoding="utf-8") as f:
-        return json.load(f)
-
-
-# ── Metrik Prediksi ───────────────────────────────────────────────────────────
-def replay_bkt(student_rows: list[dict], G: nx.DiGraph,
-               est_params: dict) -> list[dict]:
-    """BKT+Ontologi: one-step-ahead prediction dengan update setiap langkah."""
-    sid     = student_rows[0]["student_id"]
-    student = init_student(sid, G, est_params)
-    preds   = []
-    for row in student_rows:
-        kc_id = row["kc_id"]
-        state = student.kc_states[kc_id]
-        pL, pG, pS = state.p_know, state.p_guess, state.p_slip
-        preds.append({
-            "actual":    row["correct"],
-            "predicted": pL * (1 - pS) + (1 - pL) * pG,
-        })
-        process_response(student, G, kc_id, bool(row["correct"]))
-    return preds
-
-
-def replay_sequential(student_rows: list[dict],
-                      kc_mean: dict[str, float],
-                      global_mean: float) -> list[dict]:
-    """
-    Sequential Baseline: prediksi = rata-rata akurasi KC dari training.
-    Tidak ada update per siswa — sama untuk semua siswa.
-    """
+def get_available_kcs(G: nx.DiGraph, mastered: set[str]) -> list[str]:
+    """KC yang belum mastered tapi semua prerequisite-nya sudah mastered."""
     return [
-        {
-            "actual":    row["correct"],
-            "predicted": kc_mean.get(row["kc_id"], global_mean),
-        }
-        for row in student_rows
+        kc_id for kc_id in G.nodes
+        if kc_id not in mastered
+        and all(p in mastered for p in get_prerequisites(G, kc_id))
     ]
 
 
-def compute_auc_roc(preds: list[dict]) -> float:
-    actual    = [p["actual"]    for p in preds]
-    predicted = [p["predicted"] for p in preds]
-    n_pos = sum(actual); n_neg = len(actual) - n_pos
-    if n_pos == 0 or n_neg == 0:
-        return 0.5
-    thresholds = sorted(set(predicted), reverse=True)
-    tpr_list, fpr_list = [0.0], [0.0]
-    for t in thresholds:
-        tp = sum(1 for a, p in zip(actual, predicted) if p >= t and a == 1)
-        fp = sum(1 for a, p in zip(actual, predicted) if p >= t and a == 0)
-        tpr_list.append(tp / n_pos)
-        fpr_list.append(fp / n_neg)
-    tpr_list.append(1.0); fpr_list.append(1.0)
-    return round(sum(
-        (fpr_list[i]-fpr_list[i-1])*(tpr_list[i]+tpr_list[i-1])/2
-        for i in range(1, len(tpr_list))
-    ), 4)
-
-
-def compute_rmse(preds: list[dict]) -> float:
-    return round(math.sqrt(
-        sum((p["predicted"] - p["actual"])**2 for p in preds) / len(preds)
-    ), 4)
-
-
-def compute_accuracy(preds: list[dict], threshold: float = 0.5) -> float:
-    return round(
-        sum(1 for p in preds if (p["predicted"] >= threshold) == bool(p["actual"]))
-        / len(preds), 4
-    )
-
-
-# ── Param Recovery ────────────────────────────────────────────────────────────
-def compute_param_recovery_bkt(by_student: dict, G: nx.DiGraph,
-                                est_params: dict) -> float:
-    """BKT+Onto: P(L₀) dari ontologi vs true P(L₀) dari data sintetis."""
-    errors = []
-    for student_rows in by_student.values():
-        sid     = student_rows[0]["student_id"]
-        student = init_student(sid, G, est_params)
-        seen = set()
-        for row in student_rows:
-            kc_id = row["kc_id"]
-            if kc_id not in seen:
-                errors.append(
-                    (student.kc_states[kc_id].p_know - row["true_p0"])**2
-                )
-                seen.add(kc_id)
-            process_response(student, G, kc_id, bool(row["correct"]))
-    return round(math.sqrt(sum(errors)/len(errors)), 4) if errors else 0.0
-
-
-def compute_param_recovery_seq(by_student: dict) -> float:
-    """Sequential: P(L₀) flat 0.35 vs true P(L₀). Tidak ada informasi ontologi."""
-    errors = []
-    for student_rows in by_student.values():
-        seen = set()
-        for row in student_rows:
-            if row["kc_id"] not in seen:
-                errors.append((FLAT_PRIOR - row["true_p0"])**2)
-                seen.add(row["kc_id"])
-    return round(math.sqrt(sum(errors)/len(errors)), 4) if errors else 0.0
-
-
-# ── Path Validity ─────────────────────────────────────────────────────────────
-def compute_path_validity_bkt(G: nx.DiGraph, est_params: dict,
-                               n_sim: int, rng: random.Random) -> float:
-    """Simulasi: berapa persen langkah BKT+Onto valid secara prasyarat."""
-    question_bank = {
-        kc: [1, 1, 0] for kc in G.nodes  # sederhana: 2 benar 1 salah
-    }
-    valid_steps = total_steps = 0
-
-    for i in range(n_sim):
-        student = init_student(f"sim_{i}", G, est_params)
-        for _ in range(200):
-            next_kc = select_next_kc(student, G)
-            if next_kc is None:
-                break
-            prereqs = get_prerequisites(G, next_kc)
-            mastered = {k for k, s in student.kc_states.items() if s.is_mastered}
-            if all(p in mastered for p in prereqs):
-                valid_steps += 1
-            total_steps += 1
-            correct = rng.choice(question_bank[next_kc])
-            process_response(student, G, next_kc, bool(correct))
-
-    return round(valid_steps / total_steps * 100, 1) if total_steps else 0.0
-
-
-def compute_path_validity_seq(G: nx.DiGraph, n_sim: int,
-                               rng: random.Random) -> float:
+# ─── Integrasi 1: Ontology-informed P(L₀) ────────────────────────────────────
+def get_ontology_informed_prior(G: nx.DiGraph, kc_id: str) -> float:
     """
-    Sequential: urutan KC tetap. Hitung berapa persen langkah
-    yang prasyaratnya sudah terpenuhi.
+    P(L₀) berdasarkan posisi KC dalam ontologi.
+    Dua faktor: difficulty (dari CP/TP) dan jumlah ancestor transitif.
+    KC lebih jauh dari root kurikulum → prior lebih rendah.
+    Rentang: 0.05–0.40. Acuan: Corbett & Anderson (1995).
     """
-    order = fixed_kc_order(G)
-    valid_steps = total_steps = 0
-
-    for _ in range(n_sim):
-        mastered = set()
-        for kc_id in order:
-            prereqs = get_prerequisites(G, kc_id)
-            if all(p in mastered for p in prereqs):
-                valid_steps += 1
-            total_steps += 1
-            # Sequential: anggap siswa "menyelesaikan" KC ini
-            # (berhasil mastery setelah N soal tetap)
-            if rng.random() < 0.55:  # probabilitas mastery tiap KC
-                mastered.add(kc_id)
-
-    return round(valid_steps / total_steps * 100, 1) if total_steps else 0.0
+    n_prereqs  = len(get_all_prerequisites(G, kc_id))
+    difficulty = G.nodes[kc_id].get("difficulty", 1)
+    base       = {1: 0.35, 2: 0.25, 3: 0.15, 4: 0.10, 5: 0.05}
+    prior      = base.get(difficulty, 0.20)
+    penalty    = min(n_prereqs * 0.02, 0.15)
+    return round(max(0.05, prior - penalty), 3)
 
 
-# ── Full Evaluation ───────────────────────────────────────────────────────────
-def evaluate(train_csv: str, test_csv: str, G: nx.DiGraph,
-             rng: random.Random,
-             estimated_params_path: str = "data/estimated_params.json",
-             n_sim: int = 100) -> tuple[dict, dict]:
+# ─── Integrasi 4 (baru): Ontology-informed P(T) ───────────────────────────────
+def get_ontology_informed_transit(G: nx.DiGraph, kc_id: str,
+                                   base_pt: float = 0.10) -> float:
+    """
+    P(T) berdasarkan posisi KC dalam ontologi.
 
-    rows_test  = load_dataset(test_csv)
-    by_student = group_by_student(rows_test)
-    all_est    = load_estimated_params(estimated_params_path)
-    est_params = all_est.get("ontologi", {})
+    Intuisi: KC yang lebih "fundamental" (banyak KC lain bergantung padanya)
+    lebih mudah dipelajari karena menjadi pondasi yang sering diperkuat
+    secara implisit. KC terminal (tidak ada dependent) lebih sulit karena
+    tidak ada reinforcement dari KC lain.
 
-    kc_mean     = build_seq_predictor(train_csv)
-    global_mean = sum(kc_mean.values()) / len(kc_mean) if kc_mean else 0.5
+    Mekanisme:
+      - Hitung n_dependents: jumlah KC yang (transitif) bergantung pada KC ini
+      - KC dengan banyak dependents → boost P(T) (lebih fundamental)
+      - KC terminal → P(T) sedikit lebih rendah
 
-    # ── BKT+Ontologi ──
-    print("  Menghitung BKT+Ontologi...")
-    preds_bkt = []
-    for student_rows in by_student.values():
-        preds_bkt.extend(replay_bkt(student_rows, G, est_params))
+    Rentang output: 0.07–0.20.
+    Acuan: Konsisten dengan rentang Baker et al. (2008).
+    """
+    n_dep = len(get_all_dependents(G, kc_id))
+    n_total = G.number_of_nodes()
 
-    pr_bkt  = compute_param_recovery_bkt(by_student, G, est_params)
-    pv_bkt  = compute_path_validity_bkt(G, est_params, n_sim, random.Random(rng.randint(0,99999)))
+    # Normalisasi: seberapa "sentral" KC ini (0.0 = terminal, 1.0 = paling fundamental)
+    centrality = n_dep / (n_total - 1) if n_total > 1 else 0.0
 
-    bkt_results = {
-        "auc_roc":             compute_auc_roc(preds_bkt),
-        "rmse":                compute_rmse(preds_bkt),
-        "accuracy":            compute_accuracy(preds_bkt),
-        "param_recovery_rmse": pr_bkt,
-        "path_validity_pct":   pv_bkt,
-    }
-
-    # ── Sequential Baseline ──
-    print("  Menghitung Sequential Baseline...")
-    preds_seq = []
-    for student_rows in by_student.values():
-        preds_seq.extend(replay_sequential(student_rows, kc_mean, global_mean))
-
-    pr_seq  = compute_param_recovery_seq(by_student)
-    pv_seq  = compute_path_validity_seq(G, n_sim, random.Random(rng.randint(0,99999)))
-
-    seq_results = {
-        "auc_roc":             compute_auc_roc(preds_seq),
-        "rmse":                compute_rmse(preds_seq),
-        "accuracy":            compute_accuracy(preds_seq),
-        "param_recovery_rmse": pr_seq,
-        "path_validity_pct":   pv_seq,
-    }
-
-    return bkt_results, seq_results
+    # Boost maksimal ±0.06 dari base
+    boost = round(centrality * 0.06, 4)
+    pt    = round(min(0.20, max(0.07, base_pt + boost)), 4)
+    return pt
 
 
-# ── Run ───────────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    os.chdir(Path(__file__).parent)
-    G         = build_ontology("data/math_grade1.json")
-    train_csv = "data/matematika_grade1_train.csv"
-    test_csv  = "data/matematika_grade1_test.csv"
+# ─── Integrasi 3 (improved): Learning-gain-aware KC selection ────────────────
+def get_expected_learning_gain(G: nx.DiGraph, kc_id: str,
+                                p_know: float, p_transit: float) -> float:
+    """
+    Expected learning gain jika KC ini dikerjakan satu soal.
 
-    print("Menjalankan evaluasi (n_sim=100)...\n")
-    bkt_r, seq_r = evaluate(train_csv, test_csv, G, random.Random(42), n_sim=100)
+    ELG = P(bisa belajar) × jumlah KC yang ter-unlock setelah mastery
+        = (1 - P(L)) × P(T) × (1 + n_dependents_transitif)
 
-    METRICS = [
-        ("AUC-ROC",                   "auc_roc",             "↑"),
-        ("RMSE",                      "rmse",                "↓"),
-        ("Akurasi",                   "accuracy",            "↑"),
-        ("Param Recovery RMSE P(L₀)", "param_recovery_rmse", "↓"),
-        ("Path Validity (%)",         "path_validity_pct",   "↑"),
-    ]
+    KC yang: (a) siswa belum kuasai, (b) P(T) tinggi, (c) banyak KC bergantung
+    → ELG tinggi → prioritas lebih tinggi.
+    """
+    n_dep = len(get_all_dependents(G, kc_id))
+    elg   = (1 - p_know) * p_transit * (1 + n_dep)
+    return round(elg, 6)
 
-    W = 28
-    SEP = "─" * 70
-    print(f"\n{SEP}")
-    print(f"  {'Metrik':<{W}}  {'BKT+Ontologi':>14}  {'Seq Baseline':>12}  Better")
-    print(SEP)
-    for label, key, direction in METRICS:
-        v1, v2 = bkt_r[key], seq_r[key]
-        better = ("BKT+Onto" if (
-            (direction == "↑" and v1 > v2) or
-            (direction == "↓" and v1 < v2)
-        ) else ("Baseline" if v1 != v2 else "tie"))
-        print(f"  {label:<{W}}  {str(v1):>14}  {str(v2):>12}  {better}")
-    print(SEP)
-    print("\nInterpretasi:")
-    print("  AUC-ROC, RMSE, Akurasi : kualitas prediksi P(benar) per langkah")
-    print("  Param Recovery RMSE    : seberapa akurat sistem menginisialisasi P(L₀)")
-    print("  Path Validity          : % langkah yang valid secara prasyarat kurikulum")
+
+def is_valid_learning_path(G: nx.DiGraph, path: list[str]) -> bool:
+    mastered = set()
+    for kc_id in path:
+        if not all(p in mastered for p in get_prerequisites(G, kc_id)):
+            return False
+        mastered.add(kc_id)
+    return True
