@@ -1,6 +1,6 @@
 """
 app.py — Flask backend
-Menghubungkan: ontologi + BKT engine + SQLite database
+Connect: Ontologi + BKT engine + SQLite database
 """
 
 import os
