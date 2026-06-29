@@ -15,8 +15,8 @@ from bkt_engine import (KCState, StudentModel, bkt_update, process_response,
 from database   import (init_db, create_student, get_student, add_stars, get_random_question,
                         upsert_kc_state, get_all_kc_states, get_mastered_kcs,
                         get_kc_state, log_interaction, get_interaction_count,
-                        get_random_question)
-
+                        get_random_question, seed_ontology)
+from seed_questions import seed
 import json
 from pathlib import Path
 
@@ -28,16 +28,31 @@ BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH  = os.path.join(BASE_DIR, "data", "math_grade1.json")
 PARAM_PATH = os.path.join(BASE_DIR, "data", "estimated_params.json")
 
-G = build_ontology(DATA_PATH)
+# Seeding
 init_db()
+print("🔄 Seeding...")
+seed_ontology(DATA_PATH)
+if count_questions() == 0:
+    seed()
+    print("✅ Questions seeded")
+else:
+    print("✅ Questions already seeded")
+  
+# Topic definitions
+TOPIC_ORDER = ["bilangan", "operasi", "geometri", "pengukuran", "pola"]
+TOPIC_LABELS = {
+    "bilangan": "Bilangan",
+    "operasi": "Operasi Bilangan",
+    "geometri": "Geometri",
+    "pengukuran": "Pengukuran",
+    "pola": "Pola & Aljabar",
+}
 
 # Load estimated params jika ada
 estimated_params = {}
 if Path(PARAM_PATH).exists():
     with open(PARAM_PATH) as f:
         estimated_params = json.load(f).get("ontologi", {})
-
-
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 def _rebuild_student_model(student_id: str) -> StudentModel:
@@ -101,19 +116,34 @@ def _progress_summary(student_id: str) -> dict:
 # ─── Routes ───────────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
-    # Coba serve dari static/ dulu, fallback ke inline
-    static_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
-    if os.path.exists(static_path):
-        return send_from_directory(
-            os.path.join(os.path.dirname(__file__), "static"), "index.html"
-        )
-    # Fallback: baca dari file manapun yang ada
-    for candidate in ["static/index.html", "index.html"]:
-        if os.path.exists(candidate):
-            with open(candidate, encoding="utf-8") as f:
-                return f.read()
-    return "index.html tidak ditemukan. Upload file static/index.html.", 404
+    return send_from_directory("static", "index.html")
 
+@app.get("/api/topics/<sid>")
+def get_topics(sid):
+    db_states = get_all_kc_states(sid)
+    topic_stats = {}
+    for topic in TOPIC_ORDER:
+        kcs_in_topic = [n for n, d in G.nodes(data=True) if d.get("topic") == topic]
+        n_mastered = sum(1 for kc in kcs_in_topic if db_states.get(kc, {}).get("is_mastered", False))
+        topic_stats[topic] = {
+            "n_total": len(kcs_in_topic),
+            "n_mastered": n_mastered,
+            "completed": n_mastered == len(kcs_in_topic) and len(kcs_in_topic) > 0,
+        }
+
+    result = []
+    for i, topic in enumerate(TOPIC_ORDER):
+        s = topic_stats[topic]
+        locked = i > 0 and topic_stats[TOPIC_ORDER[i-1]]["n_mastered"] == 0
+        result.append({
+            "id": topic,
+            "label": TOPIC_LABELS.get(topic, topic),
+            "n_mastered": s["n_mastered"],
+            "n_total": s["n_total"],
+            "completed": s["completed"],
+            "locked": locked,
+        })
+    return jsonify(result)
 
 @app.post("/api/register")
 def register():
@@ -202,7 +232,6 @@ def progress(sid):
             topics[topic]["mastered"] += 1
     summary = _progress_summary(sid)
     return jsonify({**summary, "topics": topics})
-
 
 
 # ─── Admin Routes (untuk peneliti) ───────────────────────────────────────────
