@@ -1,14 +1,7 @@
 """
 Synthetic Data Generator — BKT Generative Process
-Acuan: Corbett & Anderson (1995), Baker et al. (2008), Yudelson et al. (2013)
 
-Data di-generate dari generative process BKT (Hidden Markov Model),
-bukan random. Setiap respons punya kausalitas dari hidden knowledge state.
-
-Output: CSV dengan kolom:
-  student_id, kc_id, opportunity, correct, true_knowledge_state
-  (true_knowledge_state hanya untuk evaluasi / parameter recovery — 
-   tidak dipakai oleh BKT engine saat inferensi)
+Generated data by Hidden Markov Model
 """
 
 import json
@@ -62,8 +55,8 @@ KC_PARAM_OVERRIDES = {
     "KC-B08": {"p_transit": 0.07},
 }
 
-MAX_OPPORTUNITIES  = 40   # maks soal per KC per siswa
-MASTERY_THRESHOLD  = 0.75 # sama dengan BKT engine
+MAX_OPPORTUNITIES  = 30   # maks soal per KC per siswa
+MASTERY_THRESHOLD  = 0.95 # sama dengan BKT engine
 
 
 # ─── 2. BKT Generative Process ────────────────────────────────────────────────
@@ -157,7 +150,7 @@ def _simulate_student(
     all_rows  = []
 
     # Simulasi hingga tidak ada KC tersisa
-    max_rounds = 400  # guard infinite loop
+    max_rounds = 200  # guard infinite loop
     rounds = 0
 
     while rounds < max_rounds:
@@ -213,7 +206,7 @@ def _is_mastered_after(responses: list[dict], params: dict) -> bool:
 # ─── 4. Main Generator ────────────────────────────────────────────────────────
 def generate_dataset(
     data_path: str,
-    n_students: int = 400,
+    n_students: int = 200,
     seed: int = 42,
     output_dir: str = "data",
 ) -> tuple[str, str]:
@@ -315,10 +308,10 @@ if __name__ == "__main__":
     import os
     os.chdir(Path(__file__).parent)
 
-    print("Generating synthetic dataset (n=400 students)...")
+    print("Generating synthetic dataset (n=200 students)...")
     train_path, test_path = generate_dataset(
         data_path  = "data/math_grade1.json",
-        n_students = 400,
+        n_students = 200,
         seed       = 42,
         output_dir = "data",
     )
