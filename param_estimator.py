@@ -19,7 +19,7 @@ from pathlib import Path
 # ─── Grid Search Space ────────────────────────────────────────────────────────
 # Range mengacu Baker et al. (2008) — typical BKT parameter space
 GRID = {
-    "p_transit": [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40],
+    "p_transit": [0.05, 0.10, 0.15, 0.20, 0.30, 0.40],
     "p_guess":   [0.10, 0.15, 0.20, 0.25, 0.30, 0.35],
     "p_slip":    [0.05, 0.08, 0.10, 0.15, 0.20, 0.25],
 }
