@@ -39,7 +39,10 @@ if count_questions() == 0:
     print("✅ Questions seeded")
 else:
     print("✅ Questions already seeded")
-  
+
+G = build_ontology(DATA_PATH)
+print(f"✅ Ontology loaded: {G.number_of_nodes()} KC nodes")
+
 # Topic definitions
 TOPIC_ORDER = ["bilangan", "operasi", "geometri", "pengukuran", "pola"]
 TOPIC_LABELS = {
