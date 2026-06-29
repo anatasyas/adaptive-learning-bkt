@@ -27,7 +27,7 @@ DEFAULT_BKT_PARAMS = {
     "p_transit":         0.10,
     "p_guess":           0.25,
     "p_slip":            0.10,
-    "mastery_threshold": 0.75,
+    "mastery_threshold": 0.80,
 }
 
 # Override P(G)/P(S) per KC jika diperlukan
@@ -263,9 +263,9 @@ if __name__ == "__main__":
         print(f"  {kc_id}  P(L0)={p0:.3f}  P(T)={pt:.4f}  {name}")
 
     student = init_student("test_001", G)
-    print("\n=== Simulasi KC-B01 ===")
+    print("\n=== Simulasi KC-B1 ===")
     for i, correct in enumerate([True, False, True, True, True]):
-        r = process_response(student, G, "KC-B01", correct)
+        r = process_response(student, G, "KC-B1", correct)
         print(f"  {'✓' if correct else '✗'}  {r['p_before']:.4f} → {r['p_after']:.4f}"
               f"{'  MASTERED' if r['mastered'] else ''}"
               f"{'  propagated: '+str(r['propagated']) if r['propagated'] else ''}")
