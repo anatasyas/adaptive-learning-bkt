@@ -149,6 +149,19 @@ body{font-family:'Nunito',sans-serif;background:linear-gradient(160deg,#E3F2FD 0
     <div style="margin-top:18px;"><div class="label">Nama kamu</div>
       <input class="inp" id="inp-name" type="text" placeholder="Tulis namamu..." maxlength="20" autocomplete="off">
     </div>
+
+  <!-- SCREEN KCS (Daftar KC per Domain) -->
+<div class="screen" id="screen-kcs">
+  <div class="card">
+    <div class="topbar">
+      <button class="btn-back" onclick="backToTopics()">← Kembali</button>
+      <div class="player-badge">...</div>
+    </div>
+    <h2 id="topic-title">Daftar Materi</h2>
+    <div id="kc-list" class="topic-grid"></div>
+  </div>
+</div>
+    
     <div style="margin-top:14px;"><div class="label">Pilih kelas</div>
       <div class="class-row" id="class-picker">
         <div class="class-btn active" data-cls="1">Kelas 1<span class="class-lock"></span></div>
@@ -301,7 +314,43 @@ function renderTopics(topics){
     grid.appendChild(card);
   });
 }
-async function startTopic(id){state.topic=id;show("question");await loadNextQuestion();}
+async function startTopic(topicId) {
+    state.topic = topicId;
+    show("kcs");           // Screen baru: daftar KC
+    await loadKCs(topicId);
+}
+
+  async function loadKCs(topicId) {
+    const kcs = await api(`/api/kcs/${topicId}/${state.sid}`);
+    const container = document.getElementById("kc-list");
+    container.innerHTML = "";
+
+    document.getElementById("topic-title").textContent = 
+        TOPIC_LABELS[topicId] || topicId;
+
+    kcs.forEach(kc => {
+        const card = document.createElement("div");
+        card.className = `topic-card ${kc.is_mastered ? 'completed' : ''}`;
+        card.innerHTML = `
+            <span class="badge-corner">${kc.is_mastered ? '✅' : ''}</span>
+            <span class="topic-name">${kc.name}</span>
+            <div class="progress-wrap">
+                <div class="progress-bar" style="width:${kc.p_know*100}%"></div>
+            </div>
+            <div class="topic-prog">${Math.round(kc.p_know*100)}% dikuasai</div>
+        `;
+        if (!kc.is_mastered) {
+            card.onclick = () => startKC(kc.id);
+        }
+        container.appendChild(card);
+    });
+}
+
+async function startKC(kcId) {
+    state.currentKC = kcId;
+    show("question");
+    await loadNextQuestionForKC(kcId);
+}
 
 document.getElementById("btn-back").addEventListener("click",()=>{state.topic=null;show("topics");loadTopics();});
 document.getElementById("btn-back-topics").addEventListener("click",()=>{show("topics");loadTopics();});
