@@ -170,7 +170,23 @@ def get_kcs_by_topic(topic, sid):
             "difficulty": info.get("difficulty", 1)
         })
     return jsonify(result)
-
+  
+@app.get("/api/kcs/<topic>/<sid>")
+def get_kcs(topic, sid):
+    db_states = get_all_kc_states(sid)
+    kcs = [n for n, d in G.nodes(data=True) if d.get("topic") == topic]
+    result = []
+    for kc_id in kcs:
+        info = get_kc_info(G, kc_id)
+        state = db_states.get(kc_id, {})
+        result.append({
+            "id": kc_id,
+            "name": info["name"],
+            "p_know": round(state.get("p_know", 0), 3),
+            "is_mastered": state.get("is_mastered", False)
+        })
+    return jsonify(result)
+  
 @app.post("/api/register")
 def register():
     data = request.json
