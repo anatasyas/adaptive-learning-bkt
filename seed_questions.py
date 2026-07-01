@@ -43,14 +43,15 @@ Q = [
 
 # ════════════════════════════════════════════════════════════════
 # KC-B2: Membilang 1–10
-# ════════════════════════════════════════════════════════════════
-("KC-B2","Klik setiap 🍎 satu per satu untuk menghitung!\n\nAda berapa apel?","🍎","4","","","4",1,"hitung"),
-("KC-B2","Klik setiap 🌸 satu per satu untuk menghitung!\n\nAda berapa bunga?","🌸","6","","","6",1,"hitung"),
-("KC-B2","Klik setiap ⭐ satu per satu untuk menghitung!\n\nAda berapa bintang?","⭐","7","","","7",1,"hitung"),
-("KC-B2","Klik setiap 🐥 satu per satu untuk menghitung!\n\nAda berapa anak ayam?","🐥","3","","","3",1,"hitung"),
-("KC-B2","Lihat kupu-kupunya!\n\nAda berapa 🦋?","🦋","5","3","8","5",1,"visual_pilgan"),
-("KC-B2","Lihat balonnya!\n\nAda berapa 🎈?","🎈","8","6","10","8",1,"visual_pilgan"),
+# ════════════════════════════════════════════════════════════════  
+# KC-B2: Membilang 1–10
+("KC-B2","Klik setiap 🍎 satu per satu!\n\nAda berapa apel?","🍎","4","","","4",1,"hitung"),
+("KC-B2","Klik setiap 🌸 satu per satu!\n\nAda berapa bunga?","🌸","6","","","6",1,"hitung"),
+("KC-B2","Klik setiap ⭐ satu per satu!\n\nAda berapa bintang?","⭐","7","","","7",1,"hitung"),
 
+# Tambahkan versi langsung input angka (lebih mudah untuk siswa)
+("KC-B2","Ada berapa 🍎 di bawah ini?\n🍎 🍎 🍎 🍎","4","","","","4",1,"isian"),
+("KC-B2","Ada berapa 🌸 di bawah ini?\n🌸 🌸 🌸 🌸 🌸 🌸","6","","","","6",1,"isian"),
 # ════════════════════════════════════════════════════════════════
 # KC-B3: Mengenal bilangan 11–20
 # ════════════════════════════════════════════════════════════════
