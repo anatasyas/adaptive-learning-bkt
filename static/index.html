@@ -149,18 +149,6 @@ body{font-family:'Nunito',sans-serif;background:linear-gradient(160deg,#E3F2FD 0
     <div style="margin-top:18px;"><div class="label">Nama kamu</div>
       <input class="inp" id="inp-name" type="text" placeholder="Tulis namamu..." maxlength="20" autocomplete="off">
     </div>
-
-  <!-- SCREEN KCS (Daftar KC per Domain) -->
-<div class="screen" id="screen-kcs">
-  <div class="card">
-    <div class="topbar">
-      <button class="btn-back" onclick="backToTopics()">← Kembali</button>
-      <div class="player-badge">...</div>
-    </div>
-    <h2 id="topic-title">Daftar Materi</h2>
-    <div id="kc-list" class="topic-grid"></div>
-  </div>
-</div>
     
     <div style="margin-top:14px;"><div class="label">Pilih kelas</div>
       <div class="class-row" id="class-picker">
@@ -193,6 +181,18 @@ body{font-family:'Nunito',sans-serif;background:linear-gradient(160deg,#E3F2FD 0
     <div style="font-size:1rem;font-weight:800;color:var(--ink);margin-bottom:2px;">Pilih Topik 📚</div>
     <div class="subtitle" style="text-align:left;font-size:0.82rem;">Mau belajar apa hari ini?</div>
     <div class="topic-grid" id="topic-grid"></div>
+  </div>
+</div>
+
+<!-- SCREEN KCS (Daftar KC per Domain) -->
+<div class="screen" id="screen-kcs">
+  <div class="card">
+    <div class="topbar">
+      <button class="btn-back" onclick="backToTopics()">← Kembali</button>
+      <div class="player-badge">...</div>
+    </div>
+    <h2 id="topic-title">Daftar Materi</h2>
+    <div id="kc-list" class="topic-grid"></div>
   </div>
 </div>
 
@@ -314,42 +314,54 @@ function renderTopics(topics){
     grid.appendChild(card);
   });
 }
-async function startTopic(topicId) {
+
+async function startTopic(topicId){
     state.topic = topicId;
-    show("kcs");           // Screen baru: daftar KC
-    await loadKCs(topicId);
+    show("kcs");                    // Tampilkan daftar KC dulu
+    await loadKCsByTopic(topicId);
 }
 
-  async function loadKCs(topicId) {
-    const kcs = await api(`/api/kcs/${topicId}/${state.sid}`);
-    const container = document.getElementById("kc-list");
-    container.innerHTML = "";
+async function loadKCsByTopic(topicId) {
+    try {
+        const kcs = await api(`/api/kcs/${topicId}/${state.sid}`);
+        const container = document.getElementById("kc-list");
+        container.innerHTML = "";
+        document.getElementById("kc-topic-title").textContent = 
+            TOPIC_LABELS[topicId] || topicId;
 
-    document.getElementById("topic-title").textContent = 
-        TOPIC_LABELS[topicId] || topicId;
-
-    kcs.forEach(kc => {
-        const card = document.createElement("div");
-        card.className = `topic-card ${kc.is_mastered ? 'completed' : ''}`;
-        card.innerHTML = `
-            <span class="badge-corner">${kc.is_mastered ? '✅' : ''}</span>
-            <span class="topic-name">${kc.name}</span>
-            <div class="progress-wrap">
-                <div class="progress-bar" style="width:${kc.p_know*100}%"></div>
-            </div>
-            <div class="topic-prog">${Math.round(kc.p_know*100)}% dikuasai</div>
-        `;
-        if (!kc.is_mastered) {
-            card.onclick = () => startKC(kc.id);
-        }
-        container.appendChild(card);
-    });
+        kcs.forEach(kc => {
+            const div = document.createElement("div");
+            div.className = `topic-card ${kc.is_mastered ? 'completed' : ''}`;
+            div.style.borderColor = kc.is_mastered ? "#81C784" : "#1976D2";
+            div.innerHTML = `
+                <span class="badge-corner">${kc.is_mastered ? '✅' : '📌'}</span>
+                <span class="topic-name">${kc.name}</span>
+                <div class="progress-wrap">
+                    <div class="progress-bar" style="width:${Math.round(kc.p_know*100)}%"></div>
+                </div>
+                <div class="topic-prog">${Math.round(kc.p_know*100)}% dikuasai</div>
+            `;
+            if (!kc.is_mastered) {
+                div.onclick = () => startPracticeKC(kc.id);
+            }
+            container.appendChild(div);
+        });
+    } catch(e) {
+        console.error(e);
+        alert("Gagal memuat daftar KC");
+    }
 }
 
-async function startKC(kcId) {
+async function startPracticeKC(kcId) {
     state.currentKC = kcId;
     show("question");
-    await loadNextQuestionForKC(kcId);
+    await loadNextQuestion();
+}
+
+function backToTopics() {
+    state.topic = null;
+    show("topics");
+    loadTopics();
 }
 
 document.getElementById("btn-back").addEventListener("click",()=>{state.topic=null;show("topics");loadTopics();});
