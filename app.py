@@ -98,13 +98,17 @@ def _sync_to_db(student: StudentModel):
             state.n_correct, state.n_incorrect, state.is_mastered
         )
 
-
 def _get_question(kc_id: str) -> dict:
     q = get_random_question(kc_id)
     if not q:
-        # Fallback jika soal belum di-seed
-        q = {"kc_id": kc_id, "q": "Pilih jawaban yang benar!",
-             "options": ["A","B","C","D"], "answer": "A"}
+        # Fallback yang lebih baik
+        q = {
+            "kc_id": kc_id,
+            "q": f"Soal untuk {get_kc_info(G, kc_id)['name']}",
+            "type": "pilgan",
+            "options": ["A", "B", "C", "D"],
+            "answer": "A"
+        }
     q["kc_name"] = get_kc_info(G, kc_id)["name"]
     return q
 
