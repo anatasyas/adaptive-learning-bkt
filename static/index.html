@@ -434,6 +434,15 @@ function renderBody(q){
       canvas.querySelectorAll(".hitung-obj").forEach(o=>o.classList.add("done"));
       sbmt.disabled=true;submitAnswer(String(clickCount),q);
     });
+    // Tambahkan tombol "Input Langsung"
+    const directBtn = document.createElement("button");
+    directBtn.textContent = "Input Langsung Angka";
+    directBtn.className = "btn btn-sky";
+    directBtn.onclick = () => {
+        const num = prompt("Masukkan jumlah " + q.emoji);
+        if(num) submitAnswer(num, q);
+    };
+    wrap.appendChild(directBtn);
 
   } else if(type==="jodohkan"){
     const jw=document.createElement("div");jw.className="jodohkan-wrap";
