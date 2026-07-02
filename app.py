@@ -116,10 +116,14 @@ def _get_question(kc_id: str) -> dict:
 def _progress_summary(student_id: str) -> dict:
     db_states = get_all_kc_states(student_id)
     total = G.number_of_nodes()
-    mastered = sum(1 for s in db_states.values() if s["is_mastered"])
+    mastered = sum(1 for s in db_states.values() if s.get("is_mastered", False))
     stars = get_student(student_id)["total_stars"] if get_student(student_id) else 0
-    return {"mastered": mastered, "total": total, "stars": stars,
-            "pct": round(mastered / total * 100)}
+    return {
+        "mastered": mastered, 
+        "total": total, 
+        "stars": stars,
+        "pct": round(mastered / total * 100) if total > 0 else 0
+    }
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
