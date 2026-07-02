@@ -206,6 +206,12 @@ def register():
                         0, 0, False)
 
     return jsonify({"student_id": sid, "name": name})
+  
+    # Inisialisasi dengan p_know = 0 (siswa baru)
+    for kc_id in G.nodes:
+        upsert_kc_state(sid, kc_id, 0.0, 0, 0, False)   # ← GANTI JADI 0.0
+
+    return jsonify({"student_id": sid, "name": name})
 
 
 @app.get("/api/student/<sid>")
