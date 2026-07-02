@@ -184,15 +184,15 @@ body{font-family:'Nunito',sans-serif;background:linear-gradient(160deg,#E3F2FD 0
   </div>
 </div>
 
-<!-- SCREEN KCS (Daftar KC per Domain) -->
+<!-- SCREEN DAFTAR KC -->
 <div class="screen" id="screen-kcs">
   <div class="card">
     <div class="topbar">
-      <button class="btn-back" onclick="backToTopics()">← Kembali</button>
-      <div class="player-badge">...</div>
+      <button class="btn-back" onclick="backToTopics()">← Kembali ke Topik</button>
+      <div id="kc-player" class="player-badge"></div>
     </div>
-    <h2 id="topic-title">Daftar Materi</h2>
-    <div id="kc-list" class="topic-grid"></div>
+    <h2 id="kc-topic-title">Daftar Materi</h2>
+    <div id="kc-list" class="topic-grid" style="grid-template-columns:1fr;"></div>
   </div>
 </div>
 
@@ -333,14 +333,22 @@ async function startTopic(topicId){
 async function loadKCsByTopic(topicId) {
     try {
         const url = `/api/kcs/${topicId}/${state.sid}`;
-        console.log("Memanggil:", url);   // debug
+        console.log("Memanggil:", url);
         const kcs = await api(url);
-        console.log("Daftar KC:", kcs);   // debug
+        console.log("Daftar KC:", kcs);
 
         const container = document.getElementById("kc-list");
+        if (!container) {
+            console.error("Element kc-list tidak ditemukan!");
+            return;
+        }
+
         container.innerHTML = "";
-        document.getElementById("kc-topic-title").textContent = 
-            TOPIC_LABELS[topicId] || topicId;
+
+        const titleEl = document.getElementById("kc-topic-title");
+        if (titleEl) {
+            titleEl.textContent = TOPIC_LABELS[topicId] || topicId;
+        }
 
         if (kcs.length === 0) {
             container.innerHTML = "<p>Belum ada materi di topik ini.</p>";
@@ -368,7 +376,6 @@ async function loadKCsByTopic(topicId) {
         alert("Gagal memuat daftar KC: " + e.message);
     }
 }
-
 async function startPracticeKC(kcId) {
     state.currentKC = kcId;
     show("question");
