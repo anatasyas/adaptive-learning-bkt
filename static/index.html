@@ -620,14 +620,11 @@ async function submitAnswer(userVal,q){
       else if(v===String(userVal).trim().toLowerCase()&&!correct)b.classList.add("wrong");
     });
   } else if(type==="isian"||type==="hitung"||type==="hitung_warna"||type==="visual_tambah"){
-    const ans = document.getElementById("numpad-ans");
-    if(ans) {
-        ans.style.color = correct ? "#388E3C" : "#E64A19";
-        ans.style.fontSize = "2.8rem"; // lebih besar
-    }
-    // Tambahkan notifikasi besar
-    showFeedback(correct, res);
-}
+    const ans=document.getElementById("numpad-ans");
+    if(ans)ans.style.color=correct?"#388E3C":"#E64A19";
+    const disp=document.getElementById("hitung-disp");
+    if(disp)disp.style.color=correct?"#388E3C":"#E64A19";
+  }
 
   try{
     let body={kc_id:state.currentKC};
