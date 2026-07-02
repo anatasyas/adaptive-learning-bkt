@@ -187,20 +187,33 @@ def get_kcs(topic, sid):
   
 @app.get("/api/kcs/<topic>/<sid>")
 def get_kcs_by_topic(topic, sid):
-    db_states = get_all_kc_states(sid)
-    kcs = [n for n, d in G.nodes(data=True) if d.get("topic") == topic]
-    result = []
-    for kc_id in kcs:
-        info = get_kc_info(G, kc_id)
-        state = db_states.get(kc_id, {})
-        result.append({
-            "id": kc_id,
-            "name": info["name"],
-            "p_know": round(state.get("p_know", 0), 2),
-            "is_mastered": state.get("is_mastered", False),
-            "difficulty": info.get("difficulty", 1)
-        })
-    return jsonify(result)
+    """Daftar KC dalam satu topic dengan status unlock"""
+    try:
+        db_states = get_all_kc_states(sid)
+        kcs_in_topic = [n for n, d in G.nodes(data=True) if d.get("topic") == topic]
+        
+        result = []
+        for kc_id in kcs_in_topic:
+            info = get_kc_info(G, kc_id)
+            state = db_states.get(kc_id, {})
+            
+            # Cek apakah KC ini terunlock (prerequisite terpenuhi)
+            locked = False
+            predecessors = list(G.predecessors(kc_id))
+            if predecessors:
+                locked = any(not db_states.get(p, {}).get("is_mastered", False) for p in predecessors)
+
+            result.append({
+                "id": kc_id,
+                "name": info.get("name", kc_id),
+                "p_know": round(state.get("p_know", 0), 3),
+                "is_mastered": state.get("is_mastered", False),
+                "locked": locked
+            })
+        return jsonify(result)
+    except Exception as e:
+        print("Error get_kcs_by_topic:", str(e))
+        return jsonify([]), 500
   
 @app.post("/api/register")
 def register():
