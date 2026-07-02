@@ -192,17 +192,20 @@ def get_kcs_by_topic(topic, sid):
         kcs_in_topic = [n for n, d in G.nodes(data=True) if d.get("topic") == topic]
         
         result = []
-        for kc_id in kcs_in_topic:
+        for kc_id in sorted(kcs_in_topic):   # urutkan berdasarkan nama KC
             info = get_kc_info(G, kc_id)
             state = db_states.get(kc_id, {})
             
-            # Cek prerequisite menggunakan ontologi graph
+            # Simple sequential unlock berdasarkan urutan di list
+            # (bisa di-improve nanti dengan full graph)
             locked = False
-            predecessors = list(G.predecessors(kc_id))
-            if predecessors:
-                locked = any(not db_states.get(p, {}).get("is_mastered", False) for p in predecessors)
-            
-            # Jika tidak ada predecessor, tetap unlocked (KC pertama)
+            # Contoh: KC-B2 locked sampai KC-B1 mastered
+            if kc_id.startswith("KC-B2") and not is_kc_mastered(db_states, "KC-B1"):
+                locked = True
+            elif kc_id.startswith("KC-B3") and not is_kc_mastered(db_states, "KC-B2"):
+                locked = True
+            # tambahkan pola lain sesuai kebutuhan
+
             result.append({
                 "id": kc_id,
                 "name": info.get("name", kc_id),
@@ -214,6 +217,9 @@ def get_kcs_by_topic(topic, sid):
     except Exception as e:
         print("Error get_kcs_by_topic:", str(e))
         return jsonify([]), 500
+
+def is_kc_mastered(db_states, kc_id):
+    return db_states.get(kc_id, {}).get("is_mastered", False)
   
 @app.post("/api/register")
 def register():
