@@ -132,12 +132,15 @@ def index():
     return send_from_directory("static", "index.html")
 
 @app.get("/api/topics/<sid>")
+@app.get("/api/topics/<sid>")
 def get_topics(sid):
     db_states = get_all_kc_states(sid)
+
     topic_stats = {}
     for topic in TOPIC_ORDER:
         kcs_in_topic = [n for n, d in G.nodes(data=True) if d.get("topic") == topic]
-        n_mastered = sum(1 for kc in kcs_in_topic if db_states.get(kc, {}).get("is_mastered", False))
+        n_mastered = sum(1 for kc in kcs_in_topic 
+                         if db_states.get(kc, {}).get("is_mastered", False))
         topic_stats[topic] = {
             "n_total": len(kcs_in_topic),
             "n_mastered": n_mastered,
@@ -147,7 +150,12 @@ def get_topics(sid):
     result = []
     for i, topic in enumerate(TOPIC_ORDER):
         s = topic_stats[topic]
-        locked = i > 0 and topic_stats[TOPIC_ORDER[i-1]]["n_mastered"] == 0
+        locked = False
+        if i > 0:
+            prev_topic = TOPIC_ORDER[i-1]
+            # Topik baru terbuka hanya jika topik sebelumnya sudah ada yang dikuasai
+            locked = topic_stats[prev_topic]["n_mastered"] == 0
+
         result.append({
             "id": topic,
             "label": TOPIC_LABELS.get(topic, topic),
@@ -156,7 +164,10 @@ def get_topics(sid):
             "completed": s["completed"],
             "locked": locked,
         })
+
     return jsonify(result)
+
+
   
 @app.get("/api/kcs/<topic>/<sid>")
 def get_kcs(topic, sid):
