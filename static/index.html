@@ -323,16 +323,24 @@ async function startTopic(topicId){
 
 async function loadKCsByTopic(topicId) {
     try {
-        const kcs = await api(`/api/kcs/${topicId}/${state.sid}`);
+        const url = `/api/kcs/${topicId}/${state.sid}`;
+        console.log("Memanggil:", url);   // debug
+        const kcs = await api(url);
+        console.log("Daftar KC:", kcs);   // debug
+
         const container = document.getElementById("kc-list");
         container.innerHTML = "";
         document.getElementById("kc-topic-title").textContent = 
             TOPIC_LABELS[topicId] || topicId;
 
+        if (kcs.length === 0) {
+            container.innerHTML = "<p>Belum ada materi di topik ini.</p>";
+            return;
+        }
+
         kcs.forEach(kc => {
             const div = document.createElement("div");
             div.className = `topic-card ${kc.is_mastered ? 'completed' : ''}`;
-            div.style.borderColor = kc.is_mastered ? "#81C784" : "#1976D2";
             div.innerHTML = `
                 <span class="badge-corner">${kc.is_mastered ? '✅' : '📌'}</span>
                 <span class="topic-name">${kc.name}</span>
@@ -347,8 +355,8 @@ async function loadKCsByTopic(topicId) {
             container.appendChild(div);
         });
     } catch(e) {
-        console.error(e);
-        alert("Gagal memuat daftar KC");
+        console.error("Gagal load KC:", e);
+        alert("Gagal memuat daftar KC: " + e.message);
     }
 }
 
