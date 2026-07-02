@@ -187,7 +187,6 @@ def get_kcs(topic, sid):
   
 @app.get("/api/kcs/<topic>/<sid>")
 def get_kcs_by_topic(topic, sid):
-    """Daftar KC dalam satu topic dengan status unlock"""
     try:
         db_states = get_all_kc_states(sid)
         kcs_in_topic = [n for n, d in G.nodes(data=True) if d.get("topic") == topic]
@@ -197,12 +196,13 @@ def get_kcs_by_topic(topic, sid):
             info = get_kc_info(G, kc_id)
             state = db_states.get(kc_id, {})
             
-            # Cek apakah KC ini terunlock (prerequisite terpenuhi)
+            # Cek prerequisite menggunakan ontologi graph
             locked = False
             predecessors = list(G.predecessors(kc_id))
             if predecessors:
                 locked = any(not db_states.get(p, {}).get("is_mastered", False) for p in predecessors)
-
+            
+            # Jika tidak ada predecessor, tetap unlocked (KC pertama)
             result.append({
                 "id": kc_id,
                 "name": info.get("name", kc_id),
